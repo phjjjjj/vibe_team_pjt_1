@@ -1,44 +1,38 @@
 <script setup>
-import { ref } from 'vue'
-import { useBoardStore } from './store'
-
-const store = useBoardStore()
-
-const title = ref('')
-const content = ref('')
-
-function submitPost() {
-  if (!title.value.trim() || !content.value.trim()) return
-
-  store.addPost({
-    title: title.value,
-    content: content.value
-  })
-
-  title.value = ''
-  content.value = ''
-}
+import { RouterLink, RouterView } from 'vue-router'
 </script>
 
 <template>
-  <div style="max-width: 700px; margin: 40px auto; font-family: sans-serif;">
-    <h1>익명 게시판</h1>
+  <div class="app-shell">
+    <header class="topbar">
+      <h1 class="title">익명 게시판</h1>
+      <nav class="nav">
+        <RouterLink to="/board">게시판</RouterLink>
+        <RouterLink to="/board/write">글 작성</RouterLink>
+      </nav>
+    </header>
 
-    <form @submit.prevent="submitPost" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;">
-      <input v-model="title" placeholder="제목" />
-      <textarea v-model="content" placeholder="내용" rows="4" />
-      <button type="submit">작성</button>
-    </form>
-
-    <ul style="list-style: none; padding: 0;">
-      <li
-        v-for="post in store.posts"
-        :key="post.id"
-        style="border: 1px solid #ddd; padding: 12px; margin-bottom: 10px;"
-      >
-        <h3>{{ post.title }}</h3>
-        <p>{{ post.content }}</p>
-      </li>
-    </ul>
+    <main class="content">
+      <RouterView />
+    </main>
   </div>
 </template>
+
+<style scoped>
+.app-shell {
+  max-width: 900px;
+  margin: 32px auto;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans KR', 'Helvetica Neue', Arial;
+  padding: 0 16px;
+}
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+.title { margin: 0; font-size: 1.4rem; }
+.nav { display: flex; gap: 12px; }
+.nav a { text-decoration: none; color: #2b6cb0; }
+.content { background: #fff; padding: 12px; border-radius: 6px; box-shadow: 0 0 0 1px #eee; }
+</style>
