@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import BoardPage from './board/BoardPage.vue'
 import CalendarPage from './components/CalendarPage.vue'
 
@@ -10,9 +10,58 @@ const placeType = ref('')
 const result = ref('')
 const loading = ref(false)
 
+const city = ref('')
+const weatherInfo = ref(null)
+const weatherLoading = ref(false)
+const weatherError = ref('')
+
 const moodOptions = ['기분 전환', '편안한', '활동적인', '감성적인']
 const styleOptions = ['로맨틱', '캐주얼', '이색', '힐링']
 const placeOptions = ['관광지', '축제', '문화시설', '카페']
+
+const fetchWeather = async () => {
+  if (!city.value.trim()) {
+    weatherError.value = '도시를 입력해주세요.'
+    weatherInfo.value = null
+    return
+  }
+
+  weatherLoading.value = true
+  weatherError.value = ''
+  weatherInfo.value = null
+
+  try {
+    const apiKey = 'dbe0835b38d9cdaf7efb1d6e4793606d'
+    const url = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(
+      city.value
+    )}&appid=${apiKey}&units=metric&lang=kr`
+
+    const res = await fetch(url)
+    if (!res.ok) {
+      throw new Error('날씨 정보를 가져오지 못했습니다.')
+    }
+
+    const data = await res.json()
+
+    weatherInfo.value = {
+      name: data.name,
+      description: data.weather[0].description,
+      temp: data.main.temp,
+      feelsLike: data.main.feels_like,
+      humidity: data.main.humidity
+    }
+  } catch (error) {
+    weatherError.value = error.message || '날씨 조회 실패'
+  } finally {
+    weatherLoading.value = false
+  }
+}
+
+const weatherText = computed(() => {
+  return weatherInfo.value
+    ? `현재 ${weatherInfo.value.name}의 날씨는 ${weatherInfo.value.description}이며, 기온은 ${weatherInfo.value.temp}°C, 체감 기온은 ${weatherInfo.value.feelsLike}°C, 습도는 ${weatherInfo.value.humidity}% 입니다.`
+    : '현재 날씨 정보는 없습니다.'
+})
 
 const submitRecommendation = async () => {
   if (!mbti.value.trim() || !mood.value || !dateStyle.value || !placeType.value) {
@@ -29,6 +78,7 @@ const submitRecommendation = async () => {
 현재 기분: ${mood.value}
 선호 데이트 스타일: ${dateStyle.value}
 선호 장소 유형: ${placeType.value}
+${weatherText.value}
 위 정보를 바탕으로 흔한 코스가 아닌 특별한 데이트 장소 2곳을 추천해 주세요.
 각 장소마다 (1) 장소명 (2) 위치/간단 설명 (3) 추천 이유 (4) 어울리는 활동 (5) 주의할 점을 항목별로 짧게 적어주세요.
 `
@@ -37,7 +87,7 @@ const submitRecommendation = async () => {
     const res = await fetch('/api/recommend', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt }),
+      body: JSON.stringify({ prompt })
     })
 
     if (!res.ok) {
@@ -47,7 +97,9 @@ const submitRecommendation = async () => {
     const data = await res.json()
 
     if (data.text) result.value = data.text
-    else if (data.result) result.value = typeof data.result === 'string' ? data.result : JSON.stringify(data.result, null, 2)
+    else if (data.result)
+      result.value =
+        typeof data.result === 'string' ? data.result : JSON.stringify(data.result, null, 2)
     else result.value = JSON.stringify(data, null, 2)
   } catch (err) {
     result.value = '추천 요청 중 오류가 발생했습니다.'
@@ -111,6 +163,27 @@ const submitRecommendation = async () => {
               {{ item }}
             </button>
           </div>
+        </div>
+
+        <label class="field">
+          <span class="label-title">도시</span>
+          <input v-model="city" placeholder="예: Seoul, Busan" />
+        </label>
+
+        <div class="actions">
+          <button type="button" @click="fetchWeather" :disabled="weatherLoading">
+            {{ weatherLoading ? '날씨 조회 중...' : '날씨 조회' }}
+          </button>
+        </div>
+
+        <div v-if="weatherError" class="error">{{ weatherError }}</div>
+
+        <div v-if="weatherInfo" class="weather-box">
+          <p>현재 위치: {{ weatherInfo.name }}</p>
+          <p>날씨: {{ weatherInfo.description }}</p>
+          <p>기온: {{ weatherInfo.temp }}°C</p>
+          <p>체감: {{ weatherInfo.feelsLike }}°C</p>
+          <p>습도: {{ weatherInfo.humidity }}%</p>
         </div>
 
         <div class="actions">
@@ -204,7 +277,9 @@ const submitRecommendation = async () => {
 }
 
 .actions {
-  margin-top: 8px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .submit {
@@ -236,6 +311,19 @@ const submitRecommendation = async () => {
   color: #222;
 }
 
+.weather-box {
+  background: #f7faff;
+  border: 1px solid #dce9ff;
+  padding: 12px;
+  border-radius: 8px;
+  margin-top: 10px;
+}
+
+.error {
+  color: #d64545;
+  margin-top: 8px;
+}
+
 .board-section,
 .calendar-section {
   background: #fff;
@@ -243,10 +331,11 @@ const submitRecommendation = async () => {
   border-radius: 8px;
   box-shadow: 0 0 0 1px #eee;
 }
+
 @media (max-width: 640px) {
   .buttons button {
     padding: 8px 10px;
     font-size: 13px;
   }
 }
-</style>g
+</style>
