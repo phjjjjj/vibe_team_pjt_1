@@ -1,6 +1,7 @@
 <script setup>
 import { ref } from 'vue'
 import BoardPage from './board/BoardPage.vue'
+import CalendarPage from './components/CalendarPage.vue'
 
 const mbti = ref('')
 const mood = ref('')
@@ -45,14 +46,11 @@ const submitRecommendation = async () => {
 
     const data = await res.json()
 
-    // 여러 API 형태에 대응
     if (data.text) result.value = data.text
     else if (data.result) result.value = typeof data.result === 'string' ? data.result : JSON.stringify(data.result, null, 2)
     else result.value = JSON.stringify(data, null, 2)
   } catch (err) {
     result.value = '추천 요청 중 오류가 발생했습니다.'
-    // 개발중에는 에러를 콘솔에 출력하면 디버깅에 도움됩니다.
-    // console.error(err)
   } finally {
     loading.value = false
   }
@@ -131,6 +129,11 @@ const submitRecommendation = async () => {
     <div class="board-section">
       <h3>최근 추천 게시물</h3>
       <BoardPage />
+    </div>
+
+    <div class="calendar-section">
+      <h3>캘린더</h3>
+      <CalendarPage />
     </div>
   </section>
 </template>
@@ -233,13 +236,13 @@ const submitRecommendation = async () => {
   color: #222;
 }
 
-.board-section {
+.board-section,
+.calendar-section {
   background: #fff;
   padding: 14px;
   border-radius: 8px;
   box-shadow: 0 0 0 1px #eee;
 }
-
 @media (max-width: 640px) {
   .buttons button {
     padding: 8px 10px;
