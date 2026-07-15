@@ -6,13 +6,11 @@
 </template>
 
 <script setup>
-import Calendar from '../components/Calendar.vue'
+import Calendar from './Calendar.vue'
 </script>
 
 <style scoped>
-h2 { margin-bottom:12px; }
-</style> 
-
-<hr />
-<h3>캘린더 (테스트)</h3>
-<Calendar />
+h2 {
+  margin-bottom: 12px;
+}
+</style>
