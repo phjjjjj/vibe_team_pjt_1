@@ -23,25 +23,79 @@
     </div>
 
     <div class="selected-area" v-if="selectedDate">
-      <h4>{{ selectedDate }}</h4>
-      <ul>
-        <li v-for="ev in eventsFor(selectedDate)" :key="ev.id">
-          {{ ev.title }}
-          <button class="small" @click="removeEvent(selectedDate, ev.id)">삭제</button>
-        </li>
-      </ul>
-
-      <div class="add-area">
-        <input v-model="newTitle" placeholder="이벤트 제목" />
-        <button @click="addEvent">추가</button>
-        <button @click="clearSelected">닫기</button>
+  <h4>{{ selectedDate }}</h4>
+  <ul>
+    <li v-for="ev in eventsFor(selectedDate)" :key="ev.id">
+      <div class="event-item">
+        <span>{{ ev.title }}</span>
+        <small v-if="ev.source === 'festival'">(축제)</small>
       </div>
-    </div>
+
+      <p v-if="ev.source === 'festival'" class="festival-detail">
+        {{ ev.place }}
+        <span v-if="ev.place && ev.description"> · </span>
+        {{ ev.description }}
+      </p>
+
+      <button
+        class="small"
+        v-if="ev.source !== 'festival'"
+        @click="removeEvent(selectedDate, ev.id)"
+      >
+        삭제
+      </button>
+    </li>
+  </ul>
+
+  <div class="add-area">
+    <input v-model="newTitle" placeholder="이벤트 제목" />
+    <button @click="addEvent">추가</button>
+    <button @click="clearSelected">닫기</button>
+  </div>
+</div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+
+async function loadFestivalData() {
+  try {
+    const res = await fetch(encodeURI('/data/서울/서울_축제공연행사.json'))
+    const json = await res.json()
+
+    const items = json.items || []
+    items.forEach(item => {
+      if (!item.eventstartdate) return
+
+      const start = parseYYYYMMDD(item.eventstartdate)
+      const end = item.eventenddate ? parseYYYYMMDD(item.eventenddate) : start
+      if (!start || !end) return
+
+      const dateKeys = eachDateInRange(start, end)
+      const festivalEvent = {
+        id: `festival-${item.contentid}`,
+        title: item.title,
+        place: item.eventplace || '',
+        start: item.eventstartdate,
+        end: item.eventenddate || item.eventstartdate,
+        description: item.program || '',
+        source: 'festival'
+      }
+
+      dateKeys.forEach(dateKey => {
+        if (!festivalEvents.value[dateKey]) festivalEvents.value[dateKey] = []
+        festivalEvents.value[dateKey].push(festivalEvent)
+      })
+    })
+  } catch (e) {
+    console.error('Festival load failed', e)
+  }
+}
+
+onMounted(() => {
+  loadFestivalData()
+})
 
 function yyyyMMdd(date) {
   const y = date.getFullYear()
@@ -71,6 +125,7 @@ function loadEvents() {
   }
 }
 const events = ref(loadEvents())
+const festivalEvents = ref({})
 
 function saveEvents() {
   try { localStorage.setItem(storageKey, JSON.stringify(events.value)) } catch (e) { console.error(e) }
@@ -109,10 +164,17 @@ const grid = computed(() => {
 })
 
 function hasEvents(dateStr) {
-  return (events.value[dateStr] && events.value[dateStr].length > 0)
+  return (
+    (events.value[dateStr]?.length || 0) +
+    (festivalEvents.value[dateStr]?.length || 0)
+  ) > 0
 }
+
 function eventsFor(dateStr) {
-  return events.value[dateStr] ? events.value[dateStr] : []
+  return [
+    ...(festivalEvents.value[dateStr] || []),
+    ...(events.value[dateStr] || [])
+  ]
 }
 
 function prevMonth() {
@@ -153,6 +215,32 @@ function removeEvent(dateStr, id) {
   else delete events.value[dateStr]
   saveEvents()
 }
+
+function parseYYYYMMDD(value) {
+  if (!value) return null
+  const year = value.slice(0, 4)
+  const month = value.slice(4, 6)
+  const day = value.slice(6, 8)
+  return new Date(`${year}-${month}-${day}`)
+}
+
+function formatDateKey(date) {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+function eachDateInRange(startDate, endDate) {
+  const dates = []
+  let current = new Date(startDate)
+  while (current <= endDate) {
+    dates.push(formatDateKey(current))
+    current.setDate(current.getDate() + 1)
+  }
+  return dates
+}
+
 </script>
 
 <style scoped>
