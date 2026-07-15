@@ -12,3 +12,7 @@ import Calendar from '../components/Calendar.vue'
 <style scoped>
 h2 { margin-bottom:12px; }
 </style> 
+
+<hr />
+<h3>캘린더 (테스트)</h3>
+<Calendar />
