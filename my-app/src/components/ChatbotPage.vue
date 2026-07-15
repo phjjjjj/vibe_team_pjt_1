@@ -2,58 +2,180 @@
 import { ref } from 'vue'
 
 const messages = ref([
-  { id: 1, role: 'assistant', content: '안녕하세요! 지역 관광 정보 챗봇입니다. 질문을 입력해 주세요.' },
+  {
+    id: 1,
+    role: 'assistant',
+    content:
+      '안녕하세요! 서울 관광 정보 챗봇입니다. 서울 내 관광지, 축제, 문화시설, 쇼핑, 숙박, 여행 코스 정보를 질문해 주세요.',
+  },
 ])
 const newMessage = ref('')
 const loading = ref(false)
 const error = ref('')
+
+const categoryFiles = {
+  관광지: '서울_관광지.json',
+  레포츠: '서울_레포츠.json',
+  문화시설: '서울_문화시설.json',
+  쇼핑: '서울_쇼핑.json',
+  숙박: '서울_숙박.json',
+  여행코스: '서울_여행코스.json',
+  축제: '서울_축제공연행사.json',
+}
+
+const findCategory = (text) => {
+  if (/축제|공연|이벤트/.test(text)) return '축제'
+  if (/관광지|볼거리|명소/.test(text)) return '관광지'
+  if (/레포츠|운동|액티비티/.test(text)) return '레포츠'
+  if (/문화|박물관|전시|공연장/.test(text)) return '문화시설'
+  if (/쇼핑|시장|백화점|몰/.test(text)) return '쇼핑'
+  if (/숙박|호텔|게스트하우스|숙소/.test(text)) return '숙박'
+  if (/코스|일정|루트/.test(text)) return '여행코스'
+  return '관광지'
+}
+
+const loadSeoulData = async (category) => {
+  const fileName = categoryFiles[category]
+  const res = await fetch(`/data/서울/${fileName}`)
+  if (!res.ok) throw new Error(`서울 데이터(${fileName})를 불러올 수 없습니다. 상태: ${res.status}`)
+  return await res.json()
+}
+
+const normalizeToArray = (raw) => {
+  if (Array.isArray(raw)) return raw
+  if (raw == null) return []
+  if (Array.isArray(raw.items)) return raw.items
+  if (Array.isArray(raw.data)) return raw.data
+  for (const v of Object.values(raw)) {
+    if (Array.isArray(v)) return v
+  }
+  return []
+}
+
+// 모델 이름 기반 휴리스틱
+const usesMaxCompletionTokens = (modelName) => {
+  if (!modelName) return false
+  const name = modelName.toLowerCase()
+  return name.includes('gpt-5') || name.includes('gpt-4o')
+}
+
+const buildPayload = (modelName, outgoingMessages, options = {}) => {
+  const payload = {
+    model: modelName,
+    messages: outgoingMessages,
+  }
+  // temperature 포함 여부 (options.includeTemperature default true)
+  if (options.includeTemperature !== false) {
+    payload.temperature = options.temperature ?? 0.8
+  }
+  // 토큰 파라미터 이름 결정
+  if (options.includeTokenParam !== false) {
+    if (usesMaxCompletionTokens(modelName)) {
+      payload.max_completion_tokens = options.maxCompletionTokens ?? 800
+    } else {
+      payload.max_tokens = options.maxTokens ?? 800
+    }
+  }
+  return payload
+}
+
+const requestOpenAIWithRetries = async (payload, headers) => {
+  // 시도 순서:
+  // 1) 원본 payload 시도
+  // 2) temperature 제거 후 재시도 (만약 에러 메시지에 temperature 언급됨)
+  // 3) 토큰 파라미터 제거 후 재시도 (만약 에러 메시지에 max_tokens / max_completion_tokens 언급됨)
+  // 한 번에 하나씩 제거해서 재시도
+  const attemptFetch = async (p) => {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(p),
+    })
+    if (res.ok) return res
+    const bodyText = await res.text()
+    const err = new Error(bodyText)
+    err.status = res.status
+    err.bodyText = bodyText
+    throw err
+  }
+
+  try {
+    return await attemptFetch(payload)
+  } catch (err) {
+    const body = String(err.bodyText || '')
+    // temperature 관련 에러가 있으면 temperature 제거하고 재시도
+    if (/temperature/i.test(body) || /Unsupported value: 'temperature'/.test(body)) {
+      const p2 = { ...payload }
+      delete p2.temperature
+      try { return await attemptFetch(p2) } catch (err2) { err = err2 }
+    }
+    // max_tokens 관련 에러가 있으면 해당 토큰 파라미터 제거하고 재시도
+    if (/max_tokens|max_completion_tokens/i.test(body) || /Unsupported parameter/i.test(body)) {
+      const p3 = { ...payload }
+      delete p3.max_tokens
+      delete p3.max_completion_tokens
+      try { return await attemptFetch(p3) } catch (err3) { err = err3 }
+    }
+    // 최종 실패는 throw
+    throw err
+  }
+}
 
 const sendMessage = async () => {
   const content = newMessage.value.trim()
   if (!content) return
 
   error.value = ''
-  messages.value.push({
-    id: Date.now(),
-    role: 'user',
-    content,
-  })
+  messages.value.push({ id: Date.now(), role: 'user', content })
   newMessage.value = ''
   loading.value = true
 
   try {
-    const chatMessages = [
-      {
-        role: 'system',
-        content:
-          '당신은 한국 지역 관광 정보 챗봇입니다. 사용자의 질문에 대해 친절하고 간결하게 답변해 주세요.',
-      },
-      ...messages.value.map((msg) => ({
-        role: msg.role,
-        content: msg.content,
-      })),
+    // 디버그(키는 마스킹)
+    const rawKey = import.meta.env.VITE_OPENAI_API_KEY
+    console.log('OPENAI_KEY', rawKey ? '[REDACTED]' : undefined)
+    console.log('OPENAI_MODEL', import.meta.env.VITE_OPENAI_MODEL)
+
+    const category = findCategory(content)
+    const rawData = await loadSeoulData(category)
+    const dataArray = normalizeToArray(rawData)
+    const sampleData = dataArray.length ? dataArray.slice(0, 6) : [rawData]
+
+    const systemPrompt = `
+당신은 서울 지역 관광 정보 챗봇입니다.
+아래 JSON 데이터를 참고하여 사용자의 질문에 서울 정보만으로 답변하세요.
+질문: ${content}
+데이터(요약):
+${JSON.stringify(sampleData, null, 2)}
+(위 데이터를 참고해, 짧고 명확하게 답변하세요.)
+`
+
+    const outgoingMessages = [
+      { role: 'system', content: systemPrompt },
+      ...messages.value.map((msg) => ({ role: msg.role, content: msg.content })),
     ]
 
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: import.meta.env.VITE_OPENAI_MODEL || 'gpt-3.5-turbo',
-        messages: chatMessages,
-        temperature: 0.8,
-      }),
+    const modelName = import.meta.env.VITE_OPENAI_MODEL || 'gpt-3.5-turbo'
+
+    // 기본 payload (온전한 파라미터 포함)
+    let payload = buildPayload(modelName, outgoingMessages, {
+      includeTemperature: true,
+      temperature: 0.8,
+      includeTokenParam: true,
+      maxTokens: 800,
+      maxCompletionTokens: 800,
     })
 
-    if (!res.ok) {
-      const body = await res.text()
-      throw new Error(`${res.status} ${body}`)
+    const headers = {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}`,
     }
 
+    // 요청 및 재시도 로직
+    const res = await requestOpenAIWithRetries(payload, headers)
     const data = await res.json()
-    const assistantText = data.choices?.[0]?.message?.content || '응답을 받지 못했습니다.'
+    console.log('OpenAI response', data)
+    const assistantText = data.choices?.[0]?.message?.content || '응답이 없습니다.'
 
     messages.value.push({
       id: Date.now() + 1,
@@ -61,8 +183,16 @@ const sendMessage = async () => {
       content: assistantText.trim(),
     })
   } catch (err) {
-    error.value = '챗봇 응답 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.'
-    console.error(err)
+    console.error('Chatbot error:', err)
+    // 에러 메시지를 사용자 친화적으로 변환
+    const body = String(err.bodyText || err.message || '')
+    if (body.includes('does not have access') || body.includes('model_not_found')) {
+      error.value = '모델 접근 권한 문제: 사용 중인 API 키의 모델 접근권을 확인하세요.'
+    } else if (body.includes('Unauthorized') || body.includes('401')) {
+      error.value = 'API 키 오류: .env의 VITE_OPENAI_API_KEY를 확인하고 개발서버를 재시작하세요.'
+    } else {
+      error.value = body.length ? body : '알 수 없는 오류가 발생했습니다.'
+    }
   } finally {
     loading.value = false
   }
@@ -71,10 +201,10 @@ const sendMessage = async () => {
 
 <template>
   <section class="chatbot-page">
-    <h2>지역 관광 챗봇</h2>
+    <h2>서울 관광 챗봇</h2>
 
     <div class="chat-window">
-      <div class="chat-history">
+      <div class="chat-history" ref="history">
         <div
           v-for="msg in messages"
           :key="msg.id"
@@ -90,7 +220,7 @@ const sendMessage = async () => {
       <div class="chat-input">
         <textarea
           v-model="newMessage"
-          placeholder="예: 서울에서 추천할 만한 축제 알려줘"
+          placeholder="예: 서울에서 이번 주말에 갈 만한 축제 추천해줘"
           rows="3"
           :disabled="loading"
         />
@@ -184,5 +314,6 @@ const sendMessage = async () => {
 
 .error-text {
   color: #c53030;
+  margin-top: 8px;
 }
 </style>
