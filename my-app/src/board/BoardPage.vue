@@ -13,7 +13,22 @@ function goWrite() {
 }
 
 function removePost(id) {
+  const post = boardStore.posts.find(p => p.id === id)
+  if (!post) {
+    alert('게시물을 찾을 수 없습니다.')
+    return
+  }
+
+  const input = prompt('삭제를 위해 비밀번호를 입력하세요.')
+  if (!input) return
+
+  if (input !== post.password) {
+    alert('비밀번호가 일치하지 않습니다.')
+    return
+  }
+
   boardStore.deletePost(id)
+  alert('삭제되었습니다.')
 }
 </script>
 
