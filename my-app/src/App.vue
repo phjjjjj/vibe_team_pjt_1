@@ -12,6 +12,7 @@ import { RouterLink, RouterView } from 'vue-router'
       </div>
 
       <nav class="nav">
+        <RouterLink :to="{ name: 'Home' }">홈</RouterLink>
         <RouterLink :to="{ name: 'Board' }">게시판</RouterLink>
         <RouterLink :to="{ name: 'PostCreate' }">글 작성</RouterLink>
       </nav>
