@@ -104,7 +104,10 @@ ${JSON.stringify(sampleData, null, 2)}
 
     const data = await res.json()
     // 함수가 OpenAI 응답을 그대로 반환하므로 기존 choices 경로 사용
-    const assistantText = data.choices?.[0]?.message?.content || data.result || JSON.stringify(data)
+    const assistantText = data.choices?.[0]?.message?.content
+    if (!assistantText?.trim()) {
+      throw new Error('OpenAI가 빈 응답을 반환했습니다.')
+    }
 
     messages.value.push({
       id: Date.now() + 1,
