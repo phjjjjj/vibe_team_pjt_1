@@ -2,6 +2,7 @@
 import { RouterLink, RouterView } from 'vue-router'
 </script>
 
+
 <template>
   <div class="app-shell">
     <header class="topbar">
@@ -25,6 +26,7 @@ import { RouterLink, RouterView } from 'vue-router'
     </footer>
   </div>
 </template>
+
 
 <style scoped>
 .app-shell {
