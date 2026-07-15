@@ -60,16 +60,16 @@ const submitRecommendation = async () => {
 <template>
   <section class="home-page">
     <div class="hero">
-      <h2>특별한 데이트 장소 추천</h2>
+      <h2>데이트 장소 추천❤️</h2>
 
       <div class="recommend-form">
         <label class="field">
-          <span class="label-title">두 사람의 MBTI</span>
+          <span class="label-title">두 사람의 MBTI😀</span>
           <input v-model="mbti" placeholder="예: ENFP / ISFJ" />
         </label>
 
         <div class="button-group">
-          <p class="group-title">기분</p>
+          <p class="group-title">기분🎶</p>
           <div class="buttons">
             <button
               v-for="item in moodOptions"
@@ -84,7 +84,7 @@ const submitRecommendation = async () => {
         </div>
 
         <div class="button-group">
-          <p class="group-title">선호하는 데이트 스타일</p>
+          <p class="group-title">선호하는 데이트 스타일✨</p>
           <div class="buttons">
             <button
               v-for="item in styleOptions"
@@ -99,7 +99,7 @@ const submitRecommendation = async () => {
         </div>
 
         <div class="button-group">
-          <p class="group-title">장소 유형</p>
+          <p class="group-title">장소 유형🚩</p>
           <div class="buttons">
             <button
               v-for="item in placeOptions"
@@ -121,18 +121,18 @@ const submitRecommendation = async () => {
       </div>
 
       <div class="recommend-result" v-if="result">
-        <h3>추천 결과</h3>
+        <h3>추천 결과⭐</h3>
         <pre class="result-box">{{ result }}</pre>
       </div>
     </div>
 
     <div class="board-section">
-      <h3>최근 추천 게시물</h3>
+      <h3>최근 추천 게시물📖</h3>
       <BoardPage />
     </div>
 
     <div class="calendar-section">
-      <h3>캘린더</h3>
+      <h3>캘린더🗓️</h3>
       <CalendarPage />
     </div>
   </section>
