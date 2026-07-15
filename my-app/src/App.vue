@@ -7,8 +7,8 @@ import { RouterLink, RouterView } from 'vue-router'
   <div class="app-shell">
     <header class="topbar">
       <div class="brand">
-        <h1 class="title">홈페이지명 추천받아요</h1>
-        <p class="subtitle">간단한 익명 게시판 예시 프로젝트</p>
+        <h1 class="title">💛너랑 나랑 노랑💛 </h1>
+        <p class="subtitle">신개념 데이트 장소 추천 홈페이지</p>
       </div>
 
       <nav class="nav">
