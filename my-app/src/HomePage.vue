@@ -246,4 +246,4 @@ const submitRecommendation = async () => {
     font-size: 13px;
   }
 }
-</style>
+</style>g
