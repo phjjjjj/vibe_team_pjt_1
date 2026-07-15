@@ -119,3 +119,6 @@ export const useBoardStore = defineStore('board', {
     }
   }
 })
+
+// compatibility alias: 일부 컴포넌트가 usePostStore를 불러옴
+export const usePostStore = useBoardStore
