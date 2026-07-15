@@ -52,75 +52,6 @@ const normalizeToArray = (raw) => {
   return []
 }
 
-// 모델 이름 기반 휴리스틱
-const usesMaxCompletionTokens = (modelName) => {
-  if (!modelName) return false
-  const name = modelName.toLowerCase()
-  return name.includes('gpt-5') || name.includes('gpt-4o')
-}
-
-const buildPayload = (modelName, outgoingMessages, options = {}) => {
-  const payload = {
-    model: modelName,
-    messages: outgoingMessages,
-  }
-  // temperature 포함 여부 (options.includeTemperature default true)
-  if (options.includeTemperature !== false) {
-    payload.temperature = options.temperature ?? 0.8
-  }
-  // 토큰 파라미터 이름 결정
-  if (options.includeTokenParam !== false) {
-    if (usesMaxCompletionTokens(modelName)) {
-      payload.max_completion_tokens = options.maxCompletionTokens ?? 800
-    } else {
-      payload.max_tokens = options.maxTokens ?? 800
-    }
-  }
-  return payload
-}
-
-const requestOpenAIWithRetries = async (payload, headers) => {
-  // 시도 순서:
-  // 1) 원본 payload 시도
-  // 2) temperature 제거 후 재시도 (만약 에러 메시지에 temperature 언급됨)
-  // 3) 토큰 파라미터 제거 후 재시도 (만약 에러 메시지에 max_tokens / max_completion_tokens 언급됨)
-  // 한 번에 하나씩 제거해서 재시도
-  const attemptFetch = async (p) => {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(p),
-    })
-    if (res.ok) return res
-    const bodyText = await res.text()
-    const err = new Error(bodyText)
-    err.status = res.status
-    err.bodyText = bodyText
-    throw err
-  }
-
-  try {
-    return await attemptFetch(payload)
-  } catch (err) {
-    const body = String(err.bodyText || '')
-    // temperature 관련 에러가 있으면 temperature 제거하고 재시도
-    if (/temperature/i.test(body) || /Unsupported value: 'temperature'/.test(body)) {
-      const p2 = { ...payload }
-      delete p2.temperature
-      try { return await attemptFetch(p2) } catch (err2) { err = err2 }
-    }
-    // max_tokens 관련 에러가 있으면 해당 토큰 파라미터 제거하고 재시도
-    if (/max_tokens|max_completion_tokens/i.test(body) || /Unsupported parameter/i.test(body)) {
-      const p3 = { ...payload }
-      delete p3.max_tokens
-      delete p3.max_completion_tokens
-      try { return await attemptFetch(p3) } catch (err3) { err = err3 }
-    }
-    // 최종 실패는 throw
-    throw err
-  }
-}
-
 const sendMessage = async () => {
   const content = newMessage.value.trim()
   if (!content) return
@@ -131,11 +62,6 @@ const sendMessage = async () => {
   loading.value = true
 
   try {
-    // 디버그(키는 마스킹)
-    const rawKey = import.meta.env.VITE_OPENAI_API_KEY
-    console.log('OPENAI_KEY', rawKey ? '[REDACTED]' : undefined)
-    console.log('OPENAI_MODEL', import.meta.env.VITE_OPENAI_MODEL)
-
     const category = findCategory(content)
     const rawData = await loadSeoulData(category)
     const dataArray = normalizeToArray(rawData)
@@ -155,43 +81,45 @@ ${JSON.stringify(sampleData, null, 2)}
       ...messages.value.map((msg) => ({ role: msg.role, content: msg.content })),
     ]
 
-    const modelName = import.meta.env.VITE_OPENAI_MODEL || 'gpt-3.5-turbo'
+    const modelName = import.meta.env.VITE_OPENAI_MODEL || 'gpt-5-mini'
 
-    // 기본 payload (온전한 파라미터 포함)
-    let payload = buildPayload(modelName, outgoingMessages, {
-      includeTemperature: true,
-      temperature: 0.8,
-      includeTokenParam: true,
-      maxTokens: 800,
-      maxCompletionTokens: 800,
-    })
-
-    const headers = {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}`,
+    // 서버리스 함수에 보낼 페이로드 — 서버(함수)에서 실제 OpenAI 키를 사용합니다.
+    const payload = {
+      model: modelName,
+      messages: outgoingMessages,
+      max_completion_tokens: 800,
     }
 
-    // 요청 및 재시도 로직
-    const res = await requestOpenAIWithRetries(payload, headers)
+    // Netlify Function 경로로 요청
+    const res = await fetch('/.netlify/functions/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+
+    if (!res.ok) {
+      const text = await res.text()
+      throw new Error(`Function 호출 실패: ${res.status} ${text}`)
+    }
+
     const data = await res.json()
-    console.log('OpenAI response', data)
-    const assistantText = data.choices?.[0]?.message?.content || '응답이 없습니다.'
+    // 함수가 OpenAI 응답을 그대로 반환하므로 기존 choices 경로 사용
+    const assistantText = data.choices?.[0]?.message?.content || data.result || JSON.stringify(data)
 
     messages.value.push({
       id: Date.now() + 1,
       role: 'assistant',
-      content: assistantText.trim(),
+      content: typeof assistantText === 'string' ? assistantText.trim() : JSON.stringify(assistantText, null, 2),
     })
   } catch (err) {
     console.error('Chatbot error:', err)
-    // 에러 메시지를 사용자 친화적으로 변환
-    const body = String(err.bodyText || err.message || '')
-    if (body.includes('does not have access') || body.includes('model_not_found')) {
-      error.value = '모델 접근 권한 문제: 사용 중인 API 키의 모델 접근권을 확인하세요.'
-    } else if (body.includes('Unauthorized') || body.includes('401')) {
-      error.value = 'API 키 오류: .env의 VITE_OPENAI_API_KEY를 확인하고 개발서버를 재시작하세요.'
+    const body = String(err?.message || err)
+    if (body.includes('Unauthorized') || body.includes('401')) {
+      error.value = '서버에서 API 키가 설정되지 않았습니다. (OPENAI_API_KEY 확인)'
+    } else if (body.includes('does not have access') || body.includes('model_not_found')) {
+      error.value = '모델 접근 권한 문제: 서버 측 KEY/모델 설정을 확인하세요.'
     } else {
-      error.value = body.length ? body : '알 수 없는 오류가 발생했습니다.'
+      error.value = body
     }
   } finally {
     loading.value = false
@@ -204,7 +132,7 @@ ${JSON.stringify(sampleData, null, 2)}
     <h2>서울 관광 챗봇</h2>
 
     <div class="chat-window">
-      <div class="chat-history" ref="history">
+      <div class="chat-history">
         <div
           v-for="msg in messages"
           :key="msg.id"
