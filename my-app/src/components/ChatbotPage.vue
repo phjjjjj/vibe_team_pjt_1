@@ -9,9 +9,11 @@ const messages = ref([
       '안녕하세요! 서울 관광 정보 챗봇입니다. 서울 내 관광지, 축제, 문화시설, 쇼핑, 숙박, 여행 코스 정보를 질문해 주세요.',
   },
 ])
+
 const newMessage = ref('')
 const loading = ref(false)
 const error = ref('')
+const isOpen = ref(false)
 
 const categoryFiles = {
   관광지: '서울_관광지.json',
@@ -52,6 +54,10 @@ const normalizeToArray = (raw) => {
   return []
 }
 
+const toggleChat = () => {
+  isOpen.value = !isOpen.value
+}
+
 const sendMessage = async () => {
   const content = newMessage.value.trim()
   if (!content) return
@@ -83,14 +89,12 @@ ${JSON.stringify(sampleData, null, 2)}
 
     const modelName = import.meta.env.VITE_OPENAI_MODEL || 'gpt-5-mini'
 
-    // 서버리스 함수에 보낼 페이로드 — 서버(함수)에서 실제 OpenAI 키를 사용합니다.
     const payload = {
       model: modelName,
       messages: outgoingMessages,
       max_completion_tokens: 800,
     }
 
-    // Netlify Function 경로로 요청
     const res = await fetch('/.netlify/functions/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -103,7 +107,6 @@ ${JSON.stringify(sampleData, null, 2)}
     }
 
     const data = await res.json()
-    // 함수가 OpenAI 응답을 그대로 반환하므로 기존 choices 경로 사용
     const assistantText = data.choices?.[0]?.message?.content
     if (!assistantText?.trim()) {
       throw new Error('OpenAI가 빈 응답을 반환했습니다.')
@@ -131,10 +134,17 @@ ${JSON.stringify(sampleData, null, 2)}
 </script>
 
 <template>
-  <section class="chatbot-page">
-    <h2>서울 관광 챗봇</h2>
+  <div class="floating-chat">
+    <button class="chat-fab" @click="toggleChat">
+      {{ isOpen ? '×' : '💬' }}
+    </button>
 
-    <div class="chat-window">
+    <section v-if="isOpen" class="chat-panel">
+      <div class="chat-header">
+        <h3>서울 관광 챗봇</h3>
+        <button class="close-btn" @click="toggleChat">닫기</button>
+      </div>
+
       <div class="chat-history">
         <div
           v-for="msg in messages"
@@ -161,81 +171,128 @@ ${JSON.stringify(sampleData, null, 2)}
       </div>
 
       <p v-if="error" class="error-text">{{ error }}</p>
-    </div>
-  </section>
+    </section>
+  </div>
 </template>
 
 <style scoped>
-.chatbot-page {
-  display: grid;
-  gap: 18px;
+.floating-chat {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 9999;
 }
 
-.chat-window {
-  background: #fff;
-  border-radius: 12px;
-  padding: 18px;
-  box-shadow: 0 0 0 1px #e5e5e5;
+.chat-fab {
+  width: 56px;
+  height: 56px;
+  border: none;
+  border-radius: 50%;
+  background: #2b6cb0;
+  color: white;
+  font-size: 24px;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
+}
+
+.chat-panel {
+  width: min(92vw, 340px);
+  max-height: 68vh;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 12px;
+}
+
+.chat-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid #eee;
+}
+
+.chat-header h3 {
+  font-size: 15px;
+  margin: 0;
+}
+
+.close-btn {
+  border: none;
+  background: none;
+  color: #2b6cb0;
+  cursor: pointer;
+  font-size: 13px;
 }
 
 .chat-history {
   display: grid;
-  gap: 12px;
-  max-height: 54vh;
+  gap: 10px;
+  padding: 10px;
   overflow-y: auto;
-  padding-right: 4px;
+  flex: 1;
 }
 
 .chat-message {
-  display: grid;
-  gap: 8px;
-  padding: 12px;
-  border-radius: 12px;
+  display: inline-grid;
+  justify-self: start;
+  width: fit-content;
+  max-width: 82%;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  word-break: break-word;
 }
 
 .chat-message.user {
   background: #edf2ff;
-  justify-self: flex-end;
-  align-self: flex-end;
+  justify-self: end;
 }
 
 .chat-message.assistant {
   background: #f7fafc;
+  justify-self: start;
 }
 
 .message-label {
-  font-size: 0.82rem;
+  font-size: 0.75rem;
   color: #666;
 }
 
 .message-content {
   white-space: pre-wrap;
-  line-height: 1.5;
+  line-height: 1.4;
+  font-size: 13px;
 }
 
 .chat-input {
   display: grid;
-  gap: 12px;
-  margin-top: 12px;
+  gap: 10px;
+  padding: 10px;
+  border-top: 1px solid #eee;
 }
 
 .chat-input textarea {
   width: 100%;
   border-radius: 10px;
   border: 1px solid #d6d6d6;
-  padding: 12px;
+  padding: 10px;
   resize: vertical;
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .chat-input button {
-  width: 100px;
-  padding: 10px 14px;
+  width: 88px;
+  padding: 8px 12px;
   border: none;
   border-radius: 10px;
   background: #2b6cb0;
   color: #fff;
   cursor: pointer;
+  font-size: 13px;
 }
 
 .chat-input button:disabled {
@@ -245,6 +302,8 @@ ${JSON.stringify(sampleData, null, 2)}
 
 .error-text {
   color: #c53030;
-  margin-top: 8px;
+  margin-top: 6px;
+  padding: 0 10px 10px;
+  font-size: 12px;
 }
 </style>

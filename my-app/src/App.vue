@@ -1,7 +1,7 @@
 <script setup>
 import { RouterLink, RouterView } from 'vue-router'
+import ChatbotPage from './components/ChatbotPage.vue'
 </script>
-
 
 <template>
   <div class="app-shell">
@@ -15,7 +15,6 @@ import { RouterLink, RouterView } from 'vue-router'
         <RouterLink :to="{ name: 'Home' }">홈</RouterLink>
         <RouterLink :to="{ name: 'Board' }">게시판</RouterLink>
         <RouterLink :to="{ name: 'PostCreate' }">글 작성</RouterLink>
-        <RouterLink :to="{ name: 'Chatbot' }">챗봇</RouterLink>
       </nav>
     </header>
 
@@ -23,12 +22,13 @@ import { RouterLink, RouterView } from 'vue-router'
       <RouterView />
     </main>
 
+    <ChatbotPage />
+
     <footer class="footer">
-      <p>© 2026 익명 게시판 프로젝트</p>
+      <p>© 너랑 나랑 노랑</p>
     </footer>
   </div>
 </template>
-
 
 <style scoped>
 .app-shell {
