@@ -84,16 +84,6 @@ const filterByDate = (items, monthDay) => {
   })
 }
 
-const simplifyItem = (item) => ({
-  title: item.title,
-  eventplace: item.eventplace,
-  eventstartdate: item.eventstartdate,
-  eventenddate: item.eventenddate,
-  tel: item.tel,
-  firstimage: item.firstimage,
-  program: item.program ? item.program.slice(0, 300) : undefined,
-})
-
 const toggleChat = () => {
   isOpen.value = !isOpen.value
 }
@@ -111,28 +101,25 @@ const sendMessage = async () => {
     const relevantData = await loadRelevantData(content)
     const dateTarget = extractDate(content)
     const filteredData = filterByDate(relevantData, dateTarget)
-    const sourceData = filteredData.length ? filteredData : relevantData
-    const sampleData = sourceData.slice(0, 3).map(simplifyItem)
+    const sampleData = filteredData.length ? filteredData.slice(0, 8) : relevantData.slice(0, 8)
 
     const systemPrompt = `
 당신은 서울 지역 관광 정보 챗봇입니다.
-아래 제공된 서울 데이터만 참고하여 답변하세요.
-다른 외부 정보는 사용하지 마세요.
-
+사용자의 요청에 맞춰 축제 추천과 여행 일정을 함께 제안하세요.
 질문: ${content}
 
-데이터:
+아래 JSON 데이터를 참고하여 답변하세요:
 ${JSON.stringify(sampleData, null, 2)}
 
-- 요청한 날짜에 맞는 축제가 있으면, 최소 1개 이상 추천하세요.
-- 날짜에 맞는 축제가 없으면 "제공된 데이터에는 해당 날짜에 열리는 축제가 없습니다"라고 말하세요.
-- 그 경우에도 같은 기간에 갈 수 있는 대체 일정이나 인근 명소 추천을 함께 제시하세요.
+- 요청한 날짜에 맞는 축제가 없으면,
+  "제공된 데이터에는 해당 날짜에 열리는 축제가 없습니다"라고 답하세요.
+- 그런 경우에도 가능한 서울 여행 일정, 코스, 인근 명소, 또는 같은 기간에 방문할 만한 대체 추천을 함께 제시하세요.
 - 반드시 서울 지역 정보만 사용하세요.
 `
 
     const outgoingMessages = [
       { role: 'system', content: systemPrompt },
-      { role: 'user', content },
+      ...messages.value.map((msg) => ({ role: msg.role, content: msg.content })),
     ]
 
     const modelName = import.meta.env.VITE_OPENAI_MODEL || 'gpt-5-mini'
@@ -157,16 +144,15 @@ ${JSON.stringify(sampleData, null, 2)}
     console.log('OpenAI response:', data)
 
     if (!data || !Array.isArray(data.choices) || data.choices.length === 0) {
-      throw new Error(`OpenAI 응답에 choices가 없습니다: ${JSON.stringify(data)}`)
-    }
+    throw new Error(`OpenAI 응답에 choices가 없습니다: ${JSON.stringify(data)}`)
+}
 
-    const assistantText =
-      data.choices[0]?.message?.content ??
-      data.choices[0]?.text ??
+    const assistantText = 
+      data.choices?.[0]?.message?.content ??
+      data.choices?.[0]?.text ??
       ''
-
     if (!assistantText?.trim()) {
-      throw new Error(`OpenAI가 빈 응답을 반환했습니다. raw=${JSON.stringify(data)}`)
+      throw new Error('OpenAI가 빈 응답을 반환했습니다.')
     }
 
     messages.value.push({

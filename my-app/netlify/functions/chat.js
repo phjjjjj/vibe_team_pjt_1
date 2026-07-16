@@ -1,5 +1,4 @@
-// netlify/functions/chat.js
-// 간단한 안전 로깅 추가 + 입력 검증
+// netlify/functions/chat.js (fixed)
 export async function handler(event) {
   const log = (level, obj) => {
     const entry = { ts: new Date().toISOString(), level, ...obj }
@@ -28,10 +27,16 @@ export async function handler(event) {
     }
 
     const temperature = typeof body.temperature === 'number' ? body.temperature : undefined
-    const maxTokens = body.max_tokens ?? body.maxTokens
-    const maxCompletionTokens = body.max_completion_tokens ?? maxTokens
 
-    const payload = { model, messages }
+    // safe parsing + clamp
+    const requested = Number(body.max_tokens) || 180
+    const maxCompletionTokens = 5000 // 안전 상한 (조정 가능)
+
+    const payload = {
+      model,
+      messages,
+      max_completion_tokens: maxCompletionTokens,
+    }
     if (typeof temperature === 'number') payload.temperature = temperature
     if (typeof maxCompletionTokens === 'number') {
       payload.max_completion_tokens = maxCompletionTokens
