@@ -54,6 +54,27 @@ const normalizeToArray = (raw) => {
   return []
 }
 
+const extractDate = (text) => {
+  const match = text.match(/(\d{1,2})[월\/\.](\d{1,2})/)
+  if (!match) return null
+  const month = match[1].padStart(2, '0')
+  const day = match[2].padStart(2, '0')
+  return `${month}${day}`
+}
+
+const filterByDate = (items, monthDay) => {
+  if (!monthDay) return items
+  return items.filter((item) => {
+    const start = item.eventstartdate?.toString()
+    const end = item.eventenddate?.toString()
+    if (!start || !end) return false
+
+    const startMd = start.slice(4)
+    const endMd = end.slice(4)
+    return startMd <= monthDay && monthDay <= endMd
+  })
+}
+
 const toggleChat = () => {
   isOpen.value = !isOpen.value
 }
@@ -71,7 +92,10 @@ const sendMessage = async () => {
     const category = findCategory(content)
     const rawData = await loadSeoulData(category)
     const dataArray = normalizeToArray(rawData)
-    const sampleData = dataArray.length ? dataArray.slice(0, 6) : [rawData]
+
+    const dateTarget = extractDate(content)
+    const filteredData = dateTarget ? filterByDate(dataArray, dateTarget) : dataArray
+    const sampleData = filteredData.length ? filteredData.slice(0, 6) : []
 
     const systemPrompt = `
 당신은 서울 지역 관광 정보 챗봇입니다.
@@ -79,7 +103,8 @@ const sendMessage = async () => {
 질문: ${content}
 데이터(요약):
 ${JSON.stringify(sampleData, null, 2)}
-(위 데이터를 참고해, 짧고 명확하게 답변하세요.)
+(만약 질문에 나온 날짜에 맞는 데이터가 없으면,
+"제공된 데이터에는 해당 날짜에 열리는 축제가 없습니다"라고 답하세요.)
 `
 
     const outgoingMessages = [
