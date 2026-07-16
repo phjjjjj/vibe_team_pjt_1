@@ -1,4 +1,6 @@
-export async function handler(event) {
+// netlify/functions/chat.js
+// 간단한 안전 로깅 추가 + 입력 검증
+exports.handler = async function (event) {
   const log = (level, obj) => {
     const entry = { ts: new Date().toISOString(), level, ...obj }
     console.log(JSON.stringify(entry))
