@@ -1,5 +1,6 @@
 <script setup>
 import { ref, onMounted } from 'vue'
+
 const messages = ref([
   {
     id: 1,
@@ -13,7 +14,6 @@ const newMessage = ref('')
 const loading = ref(false)
 const error = ref('')
 const isOpen = ref(false)
-const recommendationMessage = ref('')
 
 const categoryFiles = {
   관광지: '서울_관광지.json',
@@ -25,15 +25,19 @@ const categoryFiles = {
   축제: '서울_축제공연행사.json',
 }
 
-const findCategory = (text) => {
-  if (/축제|공연|이벤트/.test(text)) return '축제'
-  if (/관광지|볼거리|명소/.test(text)) return '관광지'
-  if (/레포츠|운동|액티비티/.test(text)) return '레포츠'
-  if (/문화|박물관|전시|공연장/.test(text)) return '문화시설'
-  if (/쇼핑|시장|백화점|몰/.test(text)) return '쇼핑'
-  if (/숙박|호텔|게스트하우스|숙소/.test(text)) return '숙박'
-  if (/코스|일정|루트/.test(text)) return '여행코스'
-  return '관광지'
+const findCategories = (text) => {
+  const categories = new Set()
+
+  if (/축제|공연|이벤트/.test(text)) categories.add('축제')
+  if (/코스|일정|루트/.test(text)) categories.add('여행코스')
+  if (/관광지|볼거리|명소/.test(text)) categories.add('관광지')
+  if (/레포츠|운동|액티비티/.test(text)) categories.add('레포츠')
+  if (/문화|박물관|전시|공연장/.test(text)) categories.add('문화시설')
+  if (/쇼핑|시장|백화점|몰/.test(text)) categories.add('쇼핑')
+  if (/숙박|호텔|게스트하우스|숙소/.test(text)) categories.add('숙박')
+
+  if (categories.size === 0) categories.add('관광지')
+  return [...categories]
 }
 
 const loadSeoulData = async (category) => {
@@ -53,72 +57,15 @@ const normalizeToArray = (raw) => {
   }
   return []
 }
-const handleOpenChatbotWithRecommendation = async (event) => {
-  const initialMessage = event?.detail?.initialMessage || event?.detail?.content || ''
-  if (!initialMessage) return
 
-  isOpen.value = true
-  recommendationMessage.value = initialMessage
-
-  loading.value = true
-  error.value = ''
-  messages.value.push({ id: Date.now(), role: 'user', content: initialMessage })
-
-  try {
-    const systemPrompt = `당신은 서울 지역 관광 정보 챗봇입니다. 아래 사용자의 요청과 제공된 서울 데이터(샘플)를 참고하여, 조건에 맞는 추천을 명확히 3개 제시하세요.`
-
-    const outgoingMessages = [
-      { role: 'system', content: systemPrompt },
-      ...messages.value.map((msg) => ({ role: msg.role, content: msg.content })),
-    ]
-
-    const modelName = import.meta.env.VITE_OPENAI_MODEL || 'gpt-5-mini'
-
-    const payload = {
-      model: modelName,
-      messages: outgoingMessages,
-      max_completion_tokens: 1200,
-    }
-
-    const res = await fetch('/.netlify/functions/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
-
-    if (!res.ok) {
-      const text = await res.text()
-      throw new Error(`Function 호출 실패: ${res.status} ${text}`)
-    }
-
-    const data = await res.json()
-    const assistantText = data.choices?.[0]?.message?.content
-    if (!assistantText?.trim()) {
-      throw new Error('OpenAI가 빈 응답을 반환했습니다.')
-    }
-
-    messages.value.push({
-      id: Date.now() + 1,
-      role: 'assistant',
-      content: typeof assistantText === 'string' ? assistantText.trim() : JSON.stringify(assistantText, null, 2),
-    })
-  } catch (err) {
-    console.error('Recommendation error:', err)
-    const body = String(err?.message || err)
-    if (body.includes('Unauthorized') || body.includes('401')) {
-      error.value = '서버에서 API 키가 설정되지 않았습니다. (OPENAI_API_KEY 확인)'
-    } else if (body.includes('does not have access') || body.includes('model_not_found')) {
-      error.value = '모델 접근 권한 문제: 서버 측 KEY/모델 설정을 확인하세요.'
-    } else {
-      error.value = body
-    }
-  } finally {
-    loading.value = false
-  }
+const loadRelevantData = async (text) => {
+  const categories = findCategories(text)
+  const loaded = await Promise.all(categories.map((category) => loadSeoulData(category)))
+  return loaded.flatMap(normalizeToArray)
 }
 
 const extractDate = (text) => {
-  const match = text.match(/(\d{1,2})[월\/\.](\d{1,2})/)
+  const match = text.match(/(\d{1,2})\s*(?:월|\/|\.)\s*(\d{1,2})/)
   if (!match) return null
   const month = match[1].padStart(2, '0')
   const day = match[2].padStart(2, '0')
@@ -130,8 +77,7 @@ const filterByDate = (items, monthDay) => {
   return items.filter((item) => {
     const start = item.eventstartdate?.toString()
     const end = item.eventenddate?.toString()
-    if (!start || !end) return false
-
+    if (!start || !end) return true
     const startMd = start.slice(4)
     const endMd = end.slice(4)
     return startMd <= monthDay && monthDay <= endMd
@@ -142,10 +88,6 @@ const toggleChat = () => {
   isOpen.value = !isOpen.value
 }
 
-onMounted(() => {
-  window.addEventListener('open-chatbot-with-recommendation', handleOpenChatbotWithRecommendation)
-  window.addEventListener('open-chatbot', handleOpenChatbotWithRecommendation)
-})
 const sendMessage = async () => {
   const content = newMessage.value.trim()
   if (!content) return
@@ -156,22 +98,23 @@ const sendMessage = async () => {
   loading.value = true
 
   try {
-    const category = findCategory(content)
-    const rawData = await loadSeoulData(category)
-    const dataArray = normalizeToArray(rawData)
-
+    const relevantData = await loadRelevantData(content)
     const dateTarget = extractDate(content)
-    const filteredData = dateTarget ? filterByDate(dataArray, dateTarget) : dataArray
-    const sampleData = filteredData.length ? filteredData.slice(0, 6) : []
+    const filteredData = filterByDate(relevantData, dateTarget)
+    const sampleData = filteredData.length ? filteredData.slice(0, 8) : relevantData.slice(0, 8)
 
     const systemPrompt = `
 당신은 서울 지역 관광 정보 챗봇입니다.
-아래 JSON 데이터를 참고하여 사용자의 질문에 서울 정보만으로 답변하세요.
+사용자의 요청에 맞춰 축제 추천과 여행 일정을 함께 제안하세요.
 질문: ${content}
-데이터(요약):
+
+아래 JSON 데이터를 참고하여 답변하세요:
 ${JSON.stringify(sampleData, null, 2)}
-(만약 질문에 나온 날짜에 맞는 데이터가 없으면,
-"제공된 데이터에는 해당 날짜에 열리는 축제가 없습니다"라고 답하세요.)
+
+- 요청한 날짜에 맞는 축제가 없으면,
+  "제공된 데이터에는 해당 날짜에 열리는 축제가 없습니다"라고 답하세요.
+- 그런 경우에도 가능한 서울 여행 일정, 코스, 인근 명소, 또는 같은 기간에 방문할 만한 대체 추천을 함께 제시하세요.
+- 반드시 서울 지역 정보만 사용하세요.
 `
 
     const outgoingMessages = [
@@ -180,11 +123,10 @@ ${JSON.stringify(sampleData, null, 2)}
     ]
 
     const modelName = import.meta.env.VITE_OPENAI_MODEL || 'gpt-5-mini'
-
     const payload = {
       model: modelName,
       messages: outgoingMessages,
-      max_completion_tokens: 800,
+      max_tokens: 1000,
     }
 
     const res = await fetch('/.netlify/functions/chat', {
@@ -199,7 +141,12 @@ ${JSON.stringify(sampleData, null, 2)}
     }
 
     const data = await res.json()
-    const assistantText = data.choices?.[0]?.message?.content
+    console.log('OpenAI response:', data)
+    
+    const assistantText = 
+      data.choices?.[0]?.message?.content ??
+      data.choices?.[0]?.text ??
+      ''
     if (!assistantText?.trim()) {
       throw new Error('OpenAI가 빈 응답을 반환했습니다.')
     }
@@ -223,6 +170,12 @@ ${JSON.stringify(sampleData, null, 2)}
     loading.value = false
   }
 }
+
+onMounted(() => {
+  window.addEventListener('open-chatbot', () => {
+    isOpen.value = true
+  })
+})
 </script>
 
 <template>
@@ -253,7 +206,7 @@ ${JSON.stringify(sampleData, null, 2)}
       <div class="chat-input">
         <textarea
           v-model="newMessage"
-          placeholder="예: 서울에서 이번 주말에 갈 만한 축제 추천해줘"
+          placeholder="예: 7월 20일에 갈 만한 축제 추천해줘"
           rows="3"
           :disabled="loading"
         />
@@ -280,32 +233,32 @@ ${JSON.stringify(sampleData, null, 2)}
   height: 56px;
   border: none;
   border-radius: 50%;
-  background: var(--accent);
-  color: white;
+  background: #f6c348;
+  color: #000;
   font-size: 24px;
   cursor: pointer;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
 }
 
 .chat-panel {
-  width: min(92vw, 340px);
-  max-height: 68vh;
+  width: min(92vw, 360px);
+  max-height: 72vh;
   background: white;
-  border-radius: 16px;
+  border-radius: 18px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .chat-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 12px;
+  padding: 12px 14px;
   border-bottom: 1px solid #eee;
-  background: var(--accent-bg);
+  background: #fff7d6;
 }
 
 .chat-header h3 {
@@ -316,7 +269,7 @@ ${JSON.stringify(sampleData, null, 2)}
 .close-btn {
   border: none;
   background: none;
-  color: var(--accent-dark);
+  color: #333;
   cursor: pointer;
   font-size: 13px;
 }
@@ -324,7 +277,7 @@ ${JSON.stringify(sampleData, null, 2)}
 .chat-history {
   display: grid;
   gap: 10px;
-  padding: 10px;
+  padding: 12px;
   overflow-y: auto;
   flex: 1;
 }
@@ -336,7 +289,7 @@ ${JSON.stringify(sampleData, null, 2)}
   max-width: 82%;
   gap: 6px;
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: 12px;
   word-break: break-word;
 }
 
@@ -365,16 +318,14 @@ ${JSON.stringify(sampleData, null, 2)}
   display: flex;
   gap: 10px;
   align-items: stretch;
-  padding: 10px;
+  padding: 12px;
   border-top: 1px solid #eee;
 }
 
 .chat-input textarea {
   flex: 1;
-  min-height: 62px;
-  width: auto;
-  box-sizing: border-box;
-  border-radius: 10px;
+  min-height: 64px;
+  border-radius: 12px;
   border: 1px solid #d6d6d6;
   padding: 10px;
   resize: vertical;
@@ -382,20 +333,14 @@ ${JSON.stringify(sampleData, null, 2)}
 }
 
 .chat-input button {
-  width: 40px;
-  min-width: 40px;
-  height: auto;
-  padding: 10px 6px;
+  width: 56px;
+  min-width: 56px;
   border: none;
-  border-radius: 10px;
-  background: var(--accent);
-  color: #fff;
+  border-radius: 12px;
+  background: #f6c348;
+  color: #000;
   cursor: pointer;
   font-size: 13px;
-  writing-mode: vertical-rl;
-  text-orientation: upright;
-  line-height: 1.2;
-  align-self: stretch;
 }
 
 .chat-input button:disabled {
@@ -403,14 +348,13 @@ ${JSON.stringify(sampleData, null, 2)}
   cursor: not-allowed;
 }
 
-.chat-input button:hover {
-  background: var(--accent-hover);
+.chat-input button:hover:not(:disabled) {
+  background: #e6b734;
 }
 
 .error-text {
   color: #c53030;
-  margin-top: 6px;
-  padding: 0 10px 10px;
+  margin: 10px 12px 12px;
   font-size: 12px;
 }
 </style>
