@@ -3,6 +3,13 @@ import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useBoardStore } from '../store'
 
+const props = defineProps({
+  hideTitle: {
+    type: Boolean,
+    default: false,
+  },
+})
+
 const router = useRouter()
 const boardStore = useBoardStore()
 
@@ -91,7 +98,7 @@ function confirmDelete() {
 
 <template>
   <div>
-    <h2>게시판 목록</h2>
+    <h2 v-if="!props.hideTitle">게시판 목록</h2>
     <button @click="goWrite" style="margin-bottom:12px;">글 작성</button>
 
     <ul v-if="posts.length">

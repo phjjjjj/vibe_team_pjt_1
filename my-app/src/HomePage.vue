@@ -200,12 +200,12 @@ ${weatherText.value}
     </div>
 
     <div class="board-section">
-      <h3>최근 추천 게시물📖</h3>
-      <BoardPage />
+      <h2>최근 추천 게시물📖</h2>
+      <BoardPage :hideTitle="true" />
     </div>
 
     <div class="calendar-section">
-      <h3>캘린더🗓️</h3>
+      <h2>캘린더🗓️</h2>
       <CalendarPage />
     </div>
   </section>

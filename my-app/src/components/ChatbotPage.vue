@@ -188,7 +188,7 @@ ${JSON.stringify(sampleData, null, 2)}
   height: 56px;
   border: none;
   border-radius: 50%;
-  background: #2b6cb0;
+  background: var(--accent);
   color: white;
   font-size: 24px;
   cursor: pointer;
@@ -200,7 +200,7 @@ ${JSON.stringify(sampleData, null, 2)}
   max-height: 68vh;
   background: white;
   border-radius: 16px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -213,6 +213,7 @@ ${JSON.stringify(sampleData, null, 2)}
   align-items: center;
   padding: 10px 12px;
   border-bottom: 1px solid #eee;
+  background: var(--accent-bg);
 }
 
 .chat-header h3 {
@@ -223,7 +224,7 @@ ${JSON.stringify(sampleData, null, 2)}
 .close-btn {
   border: none;
   background: none;
-  color: #2b6cb0;
+  color: var(--accent-dark);
   cursor: pointer;
   font-size: 13px;
 }
@@ -269,14 +270,18 @@ ${JSON.stringify(sampleData, null, 2)}
 }
 
 .chat-input {
-  display: grid;
+  display: flex;
   gap: 10px;
+  align-items: stretch;
   padding: 10px;
   border-top: 1px solid #eee;
 }
 
 .chat-input textarea {
-  width: 100%;
+  flex: 1;
+  min-height: 62px;
+  width: auto;
+  box-sizing: border-box;
   border-radius: 10px;
   border: 1px solid #d6d6d6;
   padding: 10px;
@@ -285,19 +290,29 @@ ${JSON.stringify(sampleData, null, 2)}
 }
 
 .chat-input button {
-  width: 88px;
-  padding: 8px 12px;
+  width: 40px;
+  min-width: 40px;
+  height: auto;
+  padding: 10px 6px;
   border: none;
   border-radius: 10px;
-  background: #2b6cb0;
+  background: var(--accent);
   color: #fff;
   cursor: pointer;
   font-size: 13px;
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  line-height: 1.2;
+  align-self: stretch;
 }
 
 .chat-input button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.chat-input button:hover {
+  background: var(--accent-hover);
 }
 
 .error-text {

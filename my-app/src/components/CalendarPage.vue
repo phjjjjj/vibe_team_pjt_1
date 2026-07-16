@@ -1,6 +1,5 @@
 <template>
   <div>
-    <h2>캘린더</h2>
     <Calendar />
   </div>
 </template>
