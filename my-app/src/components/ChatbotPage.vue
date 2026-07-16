@@ -55,22 +55,25 @@ const normalizeToArray = (raw) => {
 }
 
 const handleOpenChatbotWithRecommendation = async (event) => {
-  const { initialMessage } = event.detail
+  const initialMessage = event?.detail?.initialMessage || event?.detail?.content || ''
   if (!initialMessage) return
-  
+
   isOpen.value = true
   recommendationMessage.value = initialMessage
-  
+
   loading.value = true
   error.value = ''
   messages.value.push({ id: Date.now(), role: 'user', content: initialMessage })
 
   try {
+    const systemPrompt = `당신은 서울 지역 관광 정보 챗봇입니다. 아래 사용자의 요청과 제공된 서울 데이터(샘플)를 참고하여, 조건에 맞는 추천을 명확히 3개 제시하세요.`
+
     const outgoingMessages = [
+      { role: 'system', content: systemPrompt },
       ...messages.value.map((msg) => ({ role: msg.role, content: msg.content })),
     ]
 
-    const modelName = import.meta.env.VITE_OPENAI_MODEL || 'gpt-4-mini'
+    const modelName = import.meta.env.VITE_OPENAI_MODEL || 'gpt-5-mini'
 
     const payload = {
       model: modelName,
@@ -121,8 +124,8 @@ const toggleChat = () => {
 
 onMounted(() => {
   window.addEventListener('open-chatbot-with-recommendation', handleOpenChatbotWithRecommendation)
+  window.addEventListener('open-chatbot', handleOpenChatbotWithRecommendation)
 })
-
 const sendMessage = async () => {
   const content = newMessage.value.trim()
   if (!content) return
