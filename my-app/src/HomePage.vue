@@ -77,26 +77,66 @@ const getSelectedDataFile = () => {
   return map[getSelectedCategory()] || '서울_관광지.json'
 }
 
-const buildRecommendationPrompt = () => {
-  return `사용자가 아래 조건으로 데이트 장소를 선택했습니다.
+const loadSeoulData = async () => {
+  try {
+    const fileName = getSelectedDataFile()
+    const res = await fetch(`/data/서울/${fileName}`)
+    if (!res.ok) {
+      console.error(`Failed to load ${fileName}`)
+      return []
+    }
+    const data = await res.json()
+    
+    if (Array.isArray(data)) return data
+    if (data.items && Array.isArray(data.items)) return data.items
+    if (data.data && Array.isArray(data.data)) return data.data
+    
+    for (const value of Object.values(data)) {
+      if (Array.isArray(value)) return value
+    }
+    return []
+  } catch (error) {
+    console.error('Error loading Seoul data:', error)
+    return []
+  }
+}
+
+const buildRecommendationPrompt = async () => {
+  const category = getSelectedCategory()
+  const dataArray = await loadSeoulData()
+  const sampleData = dataArray.slice(0, 15)
+  
+  return `당신은 서울 관광 정보 추천 전문가입니다.
+
+사용자의 데이트 선호도:
 - MBTI: ${mbti.value || '미입력'}
 - 기분: ${mood.value || '미선택'}
 - 데이트 스타일: ${dateStyle.value || '미선택'}
 - 장소 유형: ${placeType.value || '미선택'}
-- 참고 데이터 파일: ${getSelectedDataFile()}
-- 날씨 정보: ${weatherText.value}
+- 날씨: ${weatherText.value}
 
-위 조건을 반영해 서울 기준으로 적당한 데이트 장소 2곳을 추천하고, 각 장소마다 장소명, 위치/설명, 추천 이유, 어울리는 활동, 주의할 점을 짧게 정리해 주세요.`
+아래 서울 ${category} 데이터를 참고하여, 위 조건에 맞는 최고의 데이트 장소 3곳을 추천해주세요.
+
+각 장소마다:
+1. 장소명
+2. 위치/주소
+3. 간단한 설명
+4. 왜 추천했는지
+5. 어울리는 활동
+6. 주의할 점
+
+데이터:
+${JSON.stringify(sampleData, null, 2)}`
 }
 
-const openChatbotWithRecommendation = () => {
+const openChatbotWithRecommendation = async () => {
+  const prompt = await buildRecommendationPrompt()
   window.dispatchEvent(
-    new CustomEvent('open-chatbot', {
+    new CustomEvent('open-chatbot-with-recommendation', {
       detail: {
-        content: buildRecommendationPrompt(),
+        initialMessage: prompt,
         category: getSelectedCategory(),
-        region: '서울',
-        dataFileName: getSelectedDataFile()
+        region: '서울'
       }
     })
   )
@@ -130,7 +170,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('recommendation-response', handleRecommendationResponse)
 })
 
-const submitRecommendation = () => {
+const submitRecommendation = async () => {
   if (!mbti.value.trim() || !mood.value || !dateStyle.value || !placeType.value) {
     result.value = '모든 항목을 입력하고 선택해주세요.'
     return
@@ -138,7 +178,7 @@ const submitRecommendation = () => {
 
   loading.value = true
   result.value = ''
-  openChatbotWithRecommendation()
+  await openChatbotWithRecommendation()
   loading.value = false
 }
 </script>

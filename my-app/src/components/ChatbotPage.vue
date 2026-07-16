@@ -1,6 +1,5 @@
 <script setup>
-import { ref } from 'vue'
-
+import { ref, onMounted } from 'vue'
 const messages = ref([
   {
     id: 1,
@@ -14,6 +13,7 @@ const newMessage = ref('')
 const loading = ref(false)
 const error = ref('')
 const isOpen = ref(false)
+const recommendationMessage = ref('')
 
 const categoryFiles = {
   관광지: '서울_관광지.json',
@@ -54,9 +54,74 @@ const normalizeToArray = (raw) => {
   return []
 }
 
+const handleOpenChatbotWithRecommendation = async (event) => {
+  const { initialMessage } = event.detail
+  if (!initialMessage) return
+  
+  isOpen.value = true
+  recommendationMessage.value = initialMessage
+  
+  loading.value = true
+  error.value = ''
+  messages.value.push({ id: Date.now(), role: 'user', content: initialMessage })
+
+  try {
+    const outgoingMessages = [
+      ...messages.value.map((msg) => ({ role: msg.role, content: msg.content })),
+    ]
+
+    const modelName = import.meta.env.VITE_OPENAI_MODEL || 'gpt-4-mini'
+
+    const payload = {
+      model: modelName,
+      messages: outgoingMessages,
+      max_completion_tokens: 1200,
+    }
+
+    const res = await fetch('/.netlify/functions/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+
+    if (!res.ok) {
+      const text = await res.text()
+      throw new Error(`Function 호출 실패: ${res.status} ${text}`)
+    }
+
+    const data = await res.json()
+    const assistantText = data.choices?.[0]?.message?.content
+    if (!assistantText?.trim()) {
+      throw new Error('OpenAI가 빈 응답을 반환했습니다.')
+    }
+
+    messages.value.push({
+      id: Date.now() + 1,
+      role: 'assistant',
+      content: typeof assistantText === 'string' ? assistantText.trim() : JSON.stringify(assistantText, null, 2),
+    })
+  } catch (err) {
+    console.error('Recommendation error:', err)
+    const body = String(err?.message || err)
+    if (body.includes('Unauthorized') || body.includes('401')) {
+      error.value = '서버에서 API 키가 설정되지 않았습니다. (OPENAI_API_KEY 확인)'
+    } else if (body.includes('does not have access') || body.includes('model_not_found')) {
+      error.value = '모델 접근 권한 문제: 서버 측 KEY/모델 설정을 확인하세요.'
+    } else {
+      error.value = body
+    }
+  } finally {
+    loading.value = false
+  }
+}
+
 const toggleChat = () => {
   isOpen.value = !isOpen.value
 }
+
+onMounted(() => {
+  window.addEventListener('open-chatbot-with-recommendation', handleOpenChatbotWithRecommendation)
+})
 
 const sendMessage = async () => {
   const content = newMessage.value.trim()
