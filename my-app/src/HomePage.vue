@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import BoardPage from './board/BoardPage.vue'
 import CalendarPage from './components/CalendarPage.vue'
 
@@ -63,7 +63,74 @@ const weatherText = computed(() => {
     : '현재 날씨 정보는 없습니다.'
 })
 
-const submitRecommendation = async () => {
+const getSelectedCategory = () => {
+  if (placeType.value === '카페') return '관광지'
+  return placeType.value || '관광지'
+}
+
+const getSelectedDataFile = () => {
+  const map = {
+    관광지: '서울_관광지.json',
+    축제: '서울_축제공연행사.json',
+    문화시설: '서울_문화시설.json'
+  }
+  return map[getSelectedCategory()] || '서울_관광지.json'
+}
+
+const buildRecommendationPrompt = () => {
+  return `사용자가 아래 조건으로 데이트 장소를 선택했습니다.
+- MBTI: ${mbti.value || '미입력'}
+- 기분: ${mood.value || '미선택'}
+- 데이트 스타일: ${dateStyle.value || '미선택'}
+- 장소 유형: ${placeType.value || '미선택'}
+- 참고 데이터 파일: ${getSelectedDataFile()}
+- 날씨 정보: ${weatherText.value}
+
+위 조건을 반영해 서울 기준으로 적당한 데이트 장소 2곳을 추천하고, 각 장소마다 장소명, 위치/설명, 추천 이유, 어울리는 활동, 주의할 점을 짧게 정리해 주세요.`
+}
+
+const openChatbotWithRecommendation = () => {
+  window.dispatchEvent(
+    new CustomEvent('open-chatbot', {
+      detail: {
+        content: buildRecommendationPrompt(),
+        category: getSelectedCategory(),
+        region: '서울',
+        dataFileName: getSelectedDataFile()
+      }
+    })
+  )
+}
+
+const selectMood = (item) => {
+  mood.value = item
+  openChatbotWithRecommendation()
+}
+
+const selectStyle = (item) => {
+  dateStyle.value = item
+  openChatbotWithRecommendation()
+}
+
+const selectPlaceType = (item) => {
+  placeType.value = item
+  openChatbotWithRecommendation()
+}
+
+const handleRecommendationResponse = (event) => {
+  const content = event.detail?.content
+  if (content) result.value = content
+}
+
+onMounted(() => {
+  window.addEventListener('recommendation-response', handleRecommendationResponse)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('recommendation-response', handleRecommendationResponse)
+})
+
+const submitRecommendation = () => {
   if (!mbti.value.trim() || !mood.value || !dateStyle.value || !placeType.value) {
     result.value = '모든 항목을 입력하고 선택해주세요.'
     return
@@ -71,41 +138,8 @@ const submitRecommendation = async () => {
 
   loading.value = true
   result.value = ''
-
-  const prompt = `
-당신은 데이트 추천 전문가입니다.
-두 사람 MBTI: ${mbti.value}
-현재 기분: ${mood.value}
-선호 데이트 스타일: ${dateStyle.value}
-선호 장소 유형: ${placeType.value}
-${weatherText.value}
-위 정보를 바탕으로 흔한 코스가 아닌 특별한 데이트 장소 2곳을 추천해 주세요.
-각 장소마다 (1) 장소명 (2) 위치/간단 설명 (3) 추천 이유 (4) 어울리는 활동 (5) 주의할 점을 항목별로 짧게 적어주세요.
-`
-
-  try {
-    const res = await fetch('/api/recommend', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt })
-    })
-
-    if (!res.ok) {
-      throw new Error(`Network error ${res.status}`)
-    }
-
-    const data = await res.json()
-
-    if (data.text) result.value = data.text
-    else if (data.result)
-      result.value =
-        typeof data.result === 'string' ? data.result : JSON.stringify(data.result, null, 2)
-    else result.value = JSON.stringify(data, null, 2)
-  } catch (err) {
-    result.value = '추천 요청 중 오류가 발생했습니다.'
-  } finally {
-    loading.value = false
-  }
+  openChatbotWithRecommendation()
+  loading.value = false
 }
 </script>
 
