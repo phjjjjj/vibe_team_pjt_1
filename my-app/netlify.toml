@@ -8,3 +8,8 @@
   command = "npm run dev"
   targetPort = 5173
   port = 5000
+
+  [[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
